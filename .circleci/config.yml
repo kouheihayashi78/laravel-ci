@@ -4,4 +4,19 @@ jobs:
     docker:
       - image: circleci/php:7.3-node-browsers
     steps:
-      - run: echo "Hello World"
+      # checkoutはgithubからCircleCIにソースをcloneする
+      - checkout
+      - run: sudo composer self-update --1
+      # php関連パッケージをインストール
+      # ローカルで実施するテストと違って毎回インストールする必要あり
+      - run: composer install -n --prefer-dist
+      # jsの各種パッケージインストール後、jsのトランスパイル
+      - run: npm ci
+      - run: npm run dev
+      - run:
+          name: php test
+          command: vendor/bin/phpunit
+
+      # 流れとしては、CircleCIにソースをコピー
+      # php関連パッケージ(Laravelのfwのコードなど)をインストール
+      #
