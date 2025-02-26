@@ -4,4 +4,41 @@ jobs:
     docker:
       - image: circleci/php:7.3-node-browsers
     steps:
-      - run: echo "Hello World"
+      # checkoutはgithubからCircleCIにソースをcloneする
+      - checkout
+      - run: sudo composer self-update --1
+
+      # 保存されたキャッシュを復元
+      # キャッシュ見つかれば復元、なければ何も処理しない
+      - restore_cache:
+        # checksumはCircleCIのテンプレート機能で、ファイルをハッシュ化した値を算出
+        # もしcomposer.lockに変更あれば算出されるハッシュ値も異なるため、キャッシュは復元されない
+          key: composer-v1-{{ checksum "composer.lock" }}
+
+      # php関連パッケージをインストール
+      # ローカルで実施するテストと違って毎回インストールする必要あり
+      # キャッシュが見つかればvendorディレクトリにphpパッケージがあるので、インストール処理は行われない
+      - run: composer install -n --prefer-dist
+
+      # keyに指定した名前でキャッシュを保存
+      # 保存するディレクトリ名はpartsで指定したvendor
+      - save_cache:
+          key: composer-v1-{{ checksum "composer.lock" }}
+          paths:
+            # vendorディレクトリをキャッシュとして保存
+            - vendor
+
+      # jsの各種パッケージインストール後、jsのトランスパイル
+      - run: npm ci
+      - run: npm run dev
+
+      - run:
+          name: php test
+          command: vendor/bin/phpunit
+
+      # 流れとしては、CircleCIにソースをコピー
+      # キャッシュを確認し、あれば復元
+      # キャッシュなければ、php関連パッケージ(Laravelのfwのコードなど)をインストール
+      # jsの各種パッケージインストール後、jsのトランスパイル
+      # 次回から処理を短縮するためにphp関連のパッケージをキャッシュする
+      # テスト
