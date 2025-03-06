@@ -3,6 +3,24 @@ jobs:
   build:
     docker:
       - image: circleci/php:7.3-node-browsers
+      - image: circleci/postgres:11.6-alpine
+        # PostgreSQLのコンテナに対する環境変数
+        environment:
+          POSTGRES_DB: larasns
+          POSTGRES_USER: default
+          POSTGRES_PASSWORD: secret
+
+    # buildジョブ全体に適用される環境変数
+    # LaravelがPostgreSQLのDockerコンテナに接続できるよう設定
+    environment:
+      APP_ENV: testing
+      DB_CONNECTION: pgsql
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_DATABASE: larasns
+      DB_USERNAME: default
+      DB_PASSWORD: secret
+
     steps:
       # checkoutはgithubからCircleCIにソースをcloneする
       - checkout
@@ -48,6 +66,19 @@ jobs:
 
       # jsのトランスパイル
       - run: npm run dev
+
+      # LaravelがPostgreSQLに接続するのに必要なソフトウェアのインストール
+      # パッケージを最新化
+      # →pdo_pgsqlをインストールするためにlibpq-devをインストール
+      # →LaravelでPostgeSQLと接続するためには、pdo_pgsqlが必要なためインストール
+      # →PostgreSQLのコンテナに通信できるかの確認で、通信が成功するまで最大1分待つ
+      - run:
+          name: get ready for postgres
+          command: |
+            sudo apt-get update
+            sudo apt-get install libpq-dev
+            sudo docker-php-ext-install pdo_pgsql
+            dockerize -wait tcp://localhost:5432 -timeout 1m
 
       - run:
           name: php test
