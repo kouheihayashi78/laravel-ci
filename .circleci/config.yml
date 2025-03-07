@@ -3,7 +3,7 @@ jobs:
   build:
     docker:
       - image: circleci/php:7.3-node-browsers
-      - image: cimg/postgres:17.4.0
+      - image: cimg/postgres:11.17
         # PostgreSQLのコンテナに対する環境変数
         environment:
           POSTGRES_DB: larasns
