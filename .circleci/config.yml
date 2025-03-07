@@ -3,7 +3,7 @@ jobs:
   build:
     docker:
       - image: circleci/php:7.3-node-browsers
-      - image: cimg/postgres:11.17
+      - image: cimg/postgres:12.17
         # PostgreSQLのコンテナに対する環境変数
         environment:
           POSTGRES_DB: larasns
@@ -75,7 +75,7 @@ jobs:
       - run:
           name: get ready for postgres
           command: |
-            sudo apt-get update
+            sudo apt-get update --allow-releaseinfo-change
             sudo apt-get install libpq-dev
             sudo docker-php-ext-install pdo_pgsql
             dockerize -wait tcp://localhost:5432 -timeout 1m
