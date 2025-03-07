@@ -3,11 +3,15 @@ jobs:
   build:
     docker:
       - image: circleci/php:7.3-node-browsers
-      - image: circleci/postgres:11.6-alpine
+      - image: circleci/postgres:11.14
+        # PostgreSQLのコンテナに対する環境変数
         environment:
           POSTGRES_DB: larasns
           POSTGRES_USER: default
           POSTGRES_PASSWORD: secret
+
+    # buildジョブ全体に適用される環境変数
+    # LaravelがPostgreSQLのDockerコンテナに接続できるよう設定
     environment:
       APP_ENV: testing
       DB_CONNECTION: pgsql
@@ -16,29 +20,58 @@ jobs:
       DB_DATABASE: larasns
       DB_USERNAME: default
       DB_PASSWORD: secret
+
     steps:
+      # checkoutはgithubからCircleCIにソースをcloneする
       - checkout
       - run: sudo composer self-update --1
+
+      # 保存されたキャッシュを復元
+      # キャッシュ見つかれば復元、なければ何も処理しない
       - restore_cache:
+        # checksumはCircleCIのテンプレート機能で、ファイルをハッシュ化した値を算出
+        # もしcomposer.lockに変更あれば算出されるハッシュ値も異なるため、キャッシュは復元されない
           key: composer-v1-{{ checksum "composer.lock" }}
+
+      # php関連パッケージをインストール
+      # ローカルで実施するテストと違って毎回インストールする必要あり
+      # キャッシュが見つかればvendorディレクトリにphpパッケージがあるので、インストール処理は行われない
       - run: composer install -n --prefer-dist
+
+      # keyに指定した名前でキャッシュを保存
+      # 保存するディレクトリ名はpartsで指定したvendor
       - save_cache:
           key: composer-v1-{{ checksum "composer.lock" }}
           paths:
+            # vendorディレクトリをキャッシュとして保存
             - vendor
+
+      # キャッシュでnode_modules復元
       - restore_cache:
           key: npm-v1-{{ checksum "package-lock.json" }}
+
+      # node_modulesがなければ、jsの各種パッケージインストールする
+      # npm ciはインストールする前にnode_modulesを削除してしまうため、シェルスクリプト記述
       - run:
           name: npm ci
           command: |
             if [ ! -d node_modules ]; then
               npm ci
             fi
+
       - save_cache:
           key: npm-v1-{{ checksum "package-lock.json" }}
           paths:
             - node_modules
+
+      # jsのトランスパイル
       - run: npm run dev
+
+      # LaravelがPostgreSQLに接続するのに必要なソフトウェアのインストール
+      # パッケージを最新化
+      # →pdo_pgsqlをインストールするためにlibpq-devをインストール
+      # →LaravelでPostgeSQLと接続するためには、pdo_pgsqlが必要なためインストール
+      # →PostgreSQLのコンテナに通信できるかの確認で、通信が成功するまで最大1分待つ
       - run:
           name: get ready for postgres
           command: |
@@ -46,6 +79,17 @@ jobs:
             sudo apt-get install libpq-dev
             sudo docker-php-ext-install pdo_pgsql
             dockerize -wait tcp://localhost:5432 -timeout 1m
+
       - run:
           name: php test
           command: vendor/bin/phpunit
+
+      # 流れとしては、CircleCIにソースをコピー
+      # composerのキャッシュを確認し、あれば復元
+      # composerのキャッシュなければ、php関連パッケージ(Laravelのfwのコードなど)をインストール
+      # 次回から処理を短縮するためにphp関連のパッケージをキャッシュする
+      # node_modulesのキャッシュを確認し、あれば復元
+      # node_modulesがなければjsの各種パッケージインストール
+      # 次回から処理を短縮するためにnode_modulesをキャッシュする
+      # jsのトランスパイル
+      # テスト
